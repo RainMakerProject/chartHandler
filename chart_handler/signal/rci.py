@@ -9,39 +9,24 @@ RCI_LIST = List[float]
 
 
 class RCI:
-    def __init__(
-            self, df: pandas.DataFrame,
-            duration_long: int = 21, level_long: int = -70,
-            duration_short: int = 33, level_short: int = 90,
-    ) -> None:
+    def __init__(self, df: pandas.DataFrame, duration: int) -> None:
+        self._df = df
+        self._duration = duration
+        self._rci = self._calculate(duration)
 
-        self.df = df
-        self.duration_long = duration_long
-        self.duration_short = duration_short
-        self.level_long = level_long
-        self.level_short = level_short
+    @property
+    def df(self) -> pandas.DataFrame:
+        return self._df
 
-        self.rci_long = self.calculate(duration_long)
-        self.rci_short = self.calculate(duration_short)
-        self.timing_long = self.determine_timing(self.rci_long, level_long)
-        self.timing_short = self.determine_timing(self.rci_short, level_short)
+    @property
+    def rci(self) -> RCI_LIST:
+        return self._rci
 
-    def determine_timing(self, rci: RCI_LIST, level: int) -> List[float]:
-        timing = [numpy.nan] * len(rci)
-        is_under_level = False
+    @property
+    def duration(self) -> int:
+        return self._duration
 
-        for i, n in enumerate(rci):
-            if not is_under_level and n < level:
-                is_under_level = True
-                continue
-
-            if is_under_level and n >= level:
-                is_under_level = False
-                timing[i] = self.df['Close'][i]
-
-        return timing
-
-    def calculate(self, duration: int) -> RCI_LIST:
+    def _calculate(self, duration: int) -> RCI_LIST:
         rci_list = [numpy.nan] * (duration - 1)
         closes = self.df['Close']
 
@@ -59,19 +44,59 @@ class RCI:
 
         return rci_list
 
-    def plot(self, **kwargs) -> None:
-        aps = [
-            mpf.make_addplot(self.timing_short, color='c', type='scatter', markersize=200, marker='v'),
-            mpf.make_addplot(self.timing_long, color='r', type='scatter', markersize=200, marker='^'),
 
-            mpf.make_addplot([self.level_short] * len(self.rci_short), color='black', linestyle='dotted', panel=1),
-            mpf.make_addplot(self.rci_short, color='c', ylabel=f'RCI{self.duration_short}', panel=1, secondary_y=False),
+class RCIBasic:
+    def __init__(self, rci: RCI, level: int) -> None:
+        if level == 0:
+            raise RuntimeError('0 cannot be applied as level')
+        self._rci = rci
+        self._level = level
+        self._speculation = self._determine_speculation(rci.rci, level)
 
-            mpf.make_addplot([self.level_long] * len(self.rci_long), color='black', linestyle='dotted', panel=2),
-            mpf.make_addplot(self.rci_long, color='r', ylabel=f'RCI{self.duration_long}', panel=2, secondary_y=False),
-        ]
-        mpf.plot(self.df, **{**{
-            'type': 'candle',
-            'addplot': aps,
-            'show_nontrading': True,
-        }, **kwargs})
+    @property
+    def rci(self) -> RCI:
+        return self._rci
+
+    @property
+    def level(self) -> int:
+        return self._level
+
+    @property
+    def speculation(self):
+        return self._speculation
+
+    def _determine_speculation(self, rci: RCI_LIST, level: int) -> List[float]:
+        speculation = [numpy.nan] * len(rci)
+        is_under_level = False
+        k = 1 if level < 0 else -1
+        level *= k
+
+        for i, n in enumerate(rci):
+            n *= k
+            if not is_under_level and n < level:
+                is_under_level = True
+                continue
+
+            if is_under_level and n > level:
+                is_under_level = False
+                speculation[i] = self.rci.df['Close'][i]
+
+        return speculation
+
+
+def plot(long: RCIBasic, short: RCIBasic, **kwargs) -> None:
+    aps = [
+        mpf.make_addplot(short.speculation, color='c', type='scatter', markersize=200, marker='v'),
+        mpf.make_addplot(long.speculation, color='r', type='scatter', markersize=200, marker='^'),
+
+        mpf.make_addplot([short.level] * len(short.rci.rci), color='black', linestyle='dotted', panel=1),
+        mpf.make_addplot(short.rci.rci, color='c', ylabel=f'RCI{short.rci.duration}', panel=1, secondary_y=False),
+
+        mpf.make_addplot([long.level] * len(long.rci.rci), color='black', linestyle='dotted', panel=2),
+        mpf.make_addplot(long.rci.rci, color='r', ylabel=f'RCI{long.rci.duration}', panel=2, secondary_y=False),
+    ]
+    mpf.plot(long.rci.df, **{**{
+        'type': 'candle',
+        'addplot': aps,
+        'show_nontrading': True,
+    }, **kwargs})
