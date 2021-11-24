@@ -1,11 +1,9 @@
-from typing import List
+from typing import List, Optional
 
 import mplfinance as mpf
 import pandas
 import numpy
 from scipy.stats import rankdata
-
-RCI_LIST = List[float]
 
 
 class RCI:
@@ -19,30 +17,30 @@ class RCI:
         return self._df
 
     @property
-    def rci(self) -> RCI_LIST:
+    def rci(self) -> pandas.Series:
         return self._rci
 
     @property
     def duration(self) -> int:
         return self._duration
 
-    def _calculate(self, duration: int) -> RCI_LIST:
-        rci_list = [numpy.nan] * (duration - 1)
+    def _calculate(self, duration: int) -> pandas.Series:
+        rci_at = {}
         closes = self.df['Close']
 
-        nb_close = len(closes)
-        for i in range(nb_close):
-            if i + duration > nb_close:
-                break
+        for i, index in enumerate(closes.keys(), 1):
+            if i < duration:
+                rci_at[index] = numpy.nan
+                continue
 
-            y = closes[i:i + duration]
+            y = closes[(i - duration):i]
             x_rank = numpy.arange(len(y))
             y_rank = rankdata(y, method='ordinal') - 1
             sum_diff = sum((x_rank - y_rank) ** 2)
             rci = (1 - ((6 * sum_diff) / (duration ** 3 - duration))) * 100
-            rci_list.append(rci)
+            rci_at[index] = rci
 
-        return rci_list
+        return pandas.Series(rci_at)
 
 
 class RCIBasic:
@@ -65,7 +63,7 @@ class RCIBasic:
     def speculation(self):
         return self._speculation
 
-    def _determine_speculation(self, rci: RCI_LIST, level: int) -> List[float]:
+    def _determine_speculation(self, rci: pandas.Series, level: int) -> List[float]:
         speculation = [numpy.nan] * len(rci)
         is_under_level = False
         k = 1 if level < 0 else -1
@@ -84,10 +82,10 @@ class RCIBasic:
         return speculation
 
 
-def plot(long: RCIBasic, short: RCIBasic, **kwargs) -> None:
+def plot(long: RCIBasic, short: RCIBasic, history: Optional[List[float]] = None, **kwargs) -> None:
     aps = [
-        mpf.make_addplot(short.speculation, color='c', type='scatter', markersize=200, marker='v'),
-        mpf.make_addplot(long.speculation, color='r', type='scatter', markersize=200, marker='^'),
+        # mpf.make_addplot(short.speculation, color='c', type='scatter', markersize=200, marker='v'),
+        # mpf.make_addplot(long.speculation, color='r', type='scatter', markersize=200, marker='^'),
 
         mpf.make_addplot([short.level] * len(short.rci.rci), color='black', linestyle='dotted', panel=1),
         mpf.make_addplot(short.rci.rci, color='c', ylabel=f'RCI{short.rci.duration}', panel=1, secondary_y=False),
@@ -95,6 +93,8 @@ def plot(long: RCIBasic, short: RCIBasic, **kwargs) -> None:
         mpf.make_addplot([long.level] * len(long.rci.rci), color='black', linestyle='dotted', panel=2),
         mpf.make_addplot(long.rci.rci, color='r', ylabel=f'RCI{long.rci.duration}', panel=2, secondary_y=False),
     ]
+    if history:
+        aps.append(mpf.make_addplot(history, color='black', ylabel='profits', panel=3))
     mpf.plot(long.rci.df, **{**{
         'type': 'candle',
         'addplot': aps,
