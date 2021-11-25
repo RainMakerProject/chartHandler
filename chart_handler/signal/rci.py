@@ -60,16 +60,17 @@ class RCIBasic:
         return self._level
 
     @property
-    def speculation(self):
+    def speculation(self) -> pandas.Series:
         return self._speculation
 
-    def _determine_speculation(self, rci: pandas.Series, level: int) -> List[float]:
-        speculation = [numpy.nan] * len(rci)
+    def _determine_speculation(self, rci: pandas.Series, level: int) -> pandas.Series:
         is_under_level = False
         k = 1 if level < 0 else -1
         level *= k
 
-        for i, n in enumerate(rci):
+        speculation = {}
+
+        for i, n in rci.items():
             n *= k
             if not is_under_level and n < level:
                 is_under_level = True
@@ -79,7 +80,7 @@ class RCIBasic:
                 is_under_level = False
                 speculation[i] = self.rci.df['Close'][i]
 
-        return speculation
+        return pandas.Series(speculation)
 
 
 def plot(long: RCIBasic, short: RCIBasic, history: Optional[List[float]] = None, **kwargs) -> None:

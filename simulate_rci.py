@@ -3,7 +3,6 @@ from typing import Optional, Literal, Tuple
 import os
 import dataclasses
 import pandas
-import numpy
 
 from chart_handler.signal.rci import RCI, RCIBasic
 
@@ -20,32 +19,38 @@ class Profit:
     level_long: int
     duration_short: int
     level_short: int
+    history: pandas.Series
 
 
-def _simulate(rci_long: RCIBasic, rci_short: RCIBasic, is_long_first: bool) -> Profit:
-    entry = 'long' if is_long_first else 'short'
-    p = Profit(None, entry, 0.0, 0.0, 0, 0, rci_long.rci.duration, rci_long.level, rci_short.rci.duration,
-               rci_short.level)
-    has_position = False
-    entry_price = numpy.nan
+def _simulate(rci_long: RCIBasic, rci_short: RCIBasic, is_long_first: bool, record_history: bool = False) -> Profit:
+    p = Profit(
+        None, 'long' if is_long_first else 'short', 0.0, 0.0, 0, 0,
+        rci_long.rci.duration, rci_long.level,
+        rci_short.rci.duration, rci_short.level, pandas.Series(),
+    )
 
     rci1 = rci_long if is_long_first else rci_short
     rci2 = rci_short if is_long_first else rci_long
+    last: Optional[pandas.DatetimeIndex] = None
 
-    for i, price in enumerate(rci1.speculation):
-        if not has_position:
-            if price is not numpy.nan:
-                has_position = True
-                entry_price = price
+    for i, entry_price in rci1.speculation.items():
+        if last is not None and last >= i:
+            continue
 
-        elif rci2.speculation[i] is not numpy.nan:
-            profit = rci2.speculation[i] - entry_price if is_long_first else entry_price - rci2.speculation[i]
-            p.profit += profit
-            p.won_count += 1 if profit > 0 else 0
-            p.trade_count += 1
-            p.won_ratio = p.won_count / p.trade_count
-            has_position = False
-            entry_price = numpy.nan
+        if (settlement := rci2.speculation[rci2.speculation.index > i].head(1)).empty:
+            break
+
+        last = settlement.index[0]
+        price = settlement.values[0]
+
+        profit = price - entry_price if is_long_first else entry_price - price
+        p.profit += profit
+        p.won_count += 1 if profit > 0 else 0
+        p.trade_count += 1
+        p.won_ratio = p.won_count / p.trade_count
+
+        if record_history:
+            p.history.append({last: p.profit})
 
     return p
 
@@ -83,13 +88,19 @@ def perform(df: pandas.DataFrame, chart_name: str) -> pandas.DataFrame:
 
 
 if __name__ == '__main__':
-    duration = '2021-11-05T19:00:00_2021-11-10T18:00:00'
+    duration = 'test'
     profits = pandas.DataFrame()
 
     for file in os.listdir(f'csv/{duration}'):
         name, _ = tuple(file.split('.'))
+
+        from datetime import datetime
+        print(f'{name}: start at {datetime.now()}')
+
         df = pandas.read_csv(f'csv/{duration}/{file}', index_col='Date', parse_dates=True)
         profits = pandas.concat([profits, perform(df, name)]).reset_index(drop=True)
 
-    with open(f'{duration}_rci.csv', 'w') as f:
+        print(f'{name}: end at {datetime.now()}')
+
+    with open(f'csv/{duration}_rci.csv', 'w') as f:
         f.write(profits.to_csv())
