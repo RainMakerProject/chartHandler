@@ -12,6 +12,8 @@ pynamodb = "^5.1.0"
 bitflyer = {git = "https://github.com/RainMakerProject/bitFlyer.git", rev = "main"}
 mplfinance = "^0.12.7-alpha.17"
 scipy = "^1.7.2"
+TA-Lib = "^0.4.21"
+fire = "^0.4.0"
 
 [tool.poetry.dev-dependencies]
 
