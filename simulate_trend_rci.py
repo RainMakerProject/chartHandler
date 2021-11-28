@@ -192,7 +192,7 @@ class Simulator:
 
 
 if __name__ == '__main__':
-    print(datetime.now())
+    print(f'Start: {datetime.now()}')
 
     kwargs = {'_from': datetime(1700, 1, 1), '_to': datetime(2021, 11, 30)}
     charts = {
@@ -210,16 +210,23 @@ if __name__ == '__main__':
         trade_chart = charts[trade_minutes]
 
         for trend_minutes in [30, 60]:
+            print(f'{datetime.now()}: Trade: {trade_minutes}, Trend: {trend_minutes}')
             trends.clear()
             trend_chart = charts[trend_minutes]
 
             for _adx in [20, 25, 30]:
                 for di in [20, 25, 30]:
+                    print(f'{datetime.now()}: Trade: {trade_minutes}, Trend: {trend_minutes}, ADX: {_adx}, DI: {di}')
 
-                    for entry_d in [5, 8, 9, 13, 18, 21, 22, 26, 34, 42, 45, 52, 55, 75, 89]:
-                        for exit_d in [5, 8, 9, 13, 18, 21, 22, 26, 34, 42, 45, 52, 55, 75, 89]:
+                    for entry_d in [5, 8, 9, 13, 18, 21, 22, 26, 34, 42, 45]:  # , 52, 55, 75, 89]:
+                        for exit_d in [5, 8, 9, 13, 18, 21, 22, 26, 34, 42, 45]:  # , 52, 55, 75, 89]:
                             for entry_l in [80, 85, 90, 95]:
                                 for exit_l in [80, 85, 90, 95]:
+                                    print(
+                                        f'{datetime.now()}: Trade: {trade_minutes}, Trend: {trend_minutes}, '
+                                        f'ADX: {_adx}, DI: {di}, '
+                                        f'ENTRY: D: {entry_d}, L: {entry_l}, EXIT: D: {exit_d}, L: {exit_l}'
+                                    )
 
                                     s = Simulator(
                                         trend_chart.df, trade_chart.df,
@@ -233,9 +240,10 @@ if __name__ == '__main__':
                                         _adx, di,
                                     )
                                     s.run(p)
-                                    profits.append(p)
+                                    profits.append(p.to_dict())
 
-    with open('simulate_trend_rci.csv', 'w') as f:
-        f.write(pandas.DataFrame(profits).to_csv())
+            with open(f'simulate_trend_rci_{trade_minutes}_{trend_minutes}.csv', 'w') as f:
+                f.write(pandas.DataFrame(profits).to_csv())
+            profits.clear()
 
-    print(datetime.now())
+    print(f'End: {datetime.now()}')
