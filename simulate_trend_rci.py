@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Dict
 
 import dataclasses
 from datetime import datetime
@@ -77,13 +77,25 @@ class Profit:
         return self.won_count / (self.trade_count or 1)
 
     def to_dict(self):
-        return {**dataclasses.asdict(self), **{
+        return {
+            'trend_chart_duration': self.trend_chart_duration,
+            'trade_chart_duration': self.trade_chart_duration,
+            'entry_rci_duration': self.entry_rci_duration,
+            'entry_rci_level': self.entry_rci_level,
+            'exit_rci_duration': self.exit_rci_duration,
+            'exit_rci_level': self.exit_rci_level,
+            'adx_threshold': self.adx_threshold,
+            'di_threshold': self.di_threshold,
+            'won_sum': self.won_sum,
+            'lost_sum': self.lost_sum,
+            'trade_count': self.trade_count,
+            'won_count': self.won_count,
             'profit': self.profit,
             'profit_average': self.profit_average,
             'won_average': self.won_average,
             'lost_average': self.lost_average,
             'won_ratio': self.won_ratio,
-        }}
+        }
 
 
 class Simulator:
@@ -204,7 +216,6 @@ def simulate():
         1: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_MINUTE, **kwargs),
     }
 
-    profits = []
     for trade_minutes in [1, 5]:
         rcis.clear()
         basics.clear()
@@ -215,28 +226,28 @@ def simulate():
             trends.clear()
             trend_chart = charts[trend_minutes]
 
-            def perform(s: Simulator, _adx: int, di: int, entry_d: int, exit_d: int, entry_l: int, exit_l: int) -> None:
+            def perform(s: Simulator, p: Profit, _adx: int, di: int, entry_d: int, exit_d: int, entry_l: int,
+                        exit_l: int) -> Dict:
                 print(
                     f'{datetime.now()}: Trade: {trade_minutes}, Trend: {trend_minutes}, '
                     f'ADX: {_adx}, DI: {di}, '
                     f'ENTRY: D: {entry_d}, L: {entry_l}, EXIT: D: {exit_d}, L: {exit_l}'
                 )
-
-                p = Profit(
-                    trend_minutes, trade_minutes,
-                    entry_d, entry_l, exit_d, exit_l,
-                    _adx, di,
-                )
                 s.run(p)
-                profits.append(p.to_dict())
+                return p.to_dict()
 
-            joblib.Parallel(n_jobs=-1)(
+            profits = joblib.Parallel(n_jobs=-1)(
                 joblib.delayed(perform)(
                     Simulator(
                         trend_chart.df, trade_chart.df,
                         entry_d, -entry_l, exit_d, exit_l,
                         exit_d, -exit_l, entry_d, entry_l,
                         _adx, di, di,
+                    ),
+                    Profit(
+                        trend_minutes, trade_minutes,
+                        entry_d, entry_l, exit_d, exit_l,
+                        _adx, di,
                     ),
                     _adx,
                     di,
@@ -253,9 +264,10 @@ def simulate():
                 for _adx in [20, 25, 30]
             )
 
+            print(profits)
+
             with open(f'simulate_trend_rci_{trade_minutes}_{trend_minutes}.csv', 'w') as f:
                 f.write(pandas.DataFrame(profits).to_csv())
-            profits.clear()
 
     print(f'End: {datetime.now()}')
 
