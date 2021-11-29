@@ -80,6 +80,8 @@ class Simulator:
             u_long: RCIBasic, u_short: RCIBasic, d_long: RCIBasic, d_short: RCIBasic,
             adx_threshold: int, dip_threshold: int, dim_threshold: int,
     ) -> None:
+        self.history = {}
+
         self.trend = trend
 
         self.uptrend = (u_long, u_short)
@@ -91,7 +93,6 @@ class Simulator:
         self.dim_threshold = dim_threshold
 
     def run(self, p: Profit) -> None:
-        history = {}
         results = {}
         profit = 0
         longs: List[int] = []
@@ -123,7 +124,7 @@ class Simulator:
                 profit += result
                 result = 0
 
-            history[dt] = profit
+            self.history[dt] = profit
 
             adx = self.trend.adx[self.trend.adx.index <= dt].tail(1)
             trend_dt = adx.index[0]
@@ -160,11 +161,11 @@ class Simulator:
                 else:
                     p.lost_sum += result
 
-            history[dt] = profit
+            self.history[dt] = profit
 
     def plot(self, **kwargs) -> None:
         aps = [
-            mpf.make_addplot(self.history * 1, panel=1, secondary_y=False)
+            mpf.make_addplot(pandas.Series(self.history) * 1, panel=1, secondary_y=False)
         ]
         mpf.plot(self.trade_df, **{**{
             'type': 'candle',
@@ -251,4 +252,30 @@ def simulate():
 
 
 if __name__ == '__main__':
-    simulate()
+    # simulate()
+
+    kwargs = {'_from': datetime(1700, 1, 1), '_to': datetime(2021, 11, 30)}
+    charts = {
+        # 60: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_HOUR, **kwargs),
+        30: Chart(ProductCode.FX_BTC_JPY, Candlestick.THIRTY_MINUTES, **kwargs),
+        # 5: Chart(ProductCode.FX_BTC_JPY, Candlestick.FIVE_MINUTES, **kwargs),
+        1: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_MINUTE, **kwargs),
+    }
+
+    trend_m, trade_m = 30, 1
+    od, ol, cd, cl = 9, 85, 18, 90
+    adx, di = 20, 25
+    trend_chart = charts[trend_m]
+    trade_chart = charts[trade_m]
+
+    trend = ADXDMI(trend_chart.df)
+
+    s = Simulator(
+        trend, trade_chart.df,
+        RCIBasic(RCI(trade_chart.df, od), -ol), RCIBasic(RCI(trade_chart.df, cd), cl),
+        RCIBasic(RCI(trade_chart.df, cd), -cl), RCIBasic(RCI(trade_chart.df, od), ol),
+        adx, di, di,
+    )
+    p = Profit(trend_m, trade_m, od, ol, cd, cl, adx, di)
+    s.run(p)
+    s.plot(title=f'{trend_m, trade_m} {od, ol, cd, cl} {adx, di} {p.profit,}')
