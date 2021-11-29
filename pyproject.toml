@@ -14,6 +14,7 @@ mplfinance = "^0.12.7-alpha.17"
 scipy = "^1.7.2"
 TA-Lib = "^0.4.21"
 fire = "^0.4.0"
+joblib = "^1.1.0"
 
 [tool.poetry.dev-dependencies]
 
