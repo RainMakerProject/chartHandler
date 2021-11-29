@@ -14,30 +14,6 @@ from chart_handler.signal.trend import ADXDMI
 from chart_handler.signal.rci import RCI, RCIBasic
 from chart_handler.signal.rsi import RSI
 
-rcis = {}
-basics = {}
-trends = {}
-
-
-def get_rci(df: pandas.DataFrame, duration: int) -> RCI:
-    if duration not in rcis:
-        rcis[duration] = RCI(df, duration)
-    return rcis[duration]
-
-
-def get_basic(df: pandas.DataFrame, duration: int, level: int) -> RCIBasic:
-    if level not in basics:
-        basics[level] = {}
-    if duration not in basics[level]:
-        basics[level][duration] = RCIBasic(get_rci(df, duration), level)
-    return basics[level][duration]
-
-
-def get_trend(df: pandas.DataFrame, duration: int) -> ADXDMI:
-    if duration not in trends:
-        trends[duration] = ADXDMI(df, duration)
-    return trends[duration]
-
 
 @dataclasses.dataclass
 class Profit:
@@ -100,21 +76,14 @@ class Profit:
 
 class Simulator:
     def __init__(
-            self, trend_df: pandas.DataFrame, trade_df: pandas.DataFrame,
-            u_long_duration: int, u_long_level: int, u_short_duration: int, u_short_level: int,
-            d_long_duration: int, d_long_level: int, d_short_duration: int, d_short_level: int,
+            self, trend: ADXDMI, trade_df: pandas.DataFrame,
+            u_long: RCIBasic, u_short: RCIBasic, d_long: RCIBasic, d_short: RCIBasic,
             adx_threshold: int, dip_threshold: int, dim_threshold: int,
     ) -> None:
-        self.trend = get_trend(trend_df, 14)
+        self.trend = trend
 
-        self.uptrend = (
-            get_basic(trade_df, u_long_duration, u_long_level),
-            get_basic(trade_df, u_short_duration, u_short_level),
-        )
-        self.downtrend = (
-            get_basic(trade_df, d_long_duration, d_long_level),
-            get_basic(trade_df, d_short_duration, d_short_level),
-        )
+        self.uptrend = (u_long, u_short)
+        self.downtrend = (d_long, d_short)
         self.trade_df = trade_df
 
         self.adx_threshold = adx_threshold
@@ -216,18 +185,27 @@ def simulate():
         1: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_MINUTE, **kwargs),
     }
 
+    durations = [9, 13, 18, 21, 26, 34, 45]  # 5, 8, 22, 42, 52, 55, 75, 89]
+    levels = [80, 85, 90, 95]
+
     for trade_minutes in [1, 5]:
-        rcis.clear()
-        basics.clear()
         trade_chart = charts[trade_minutes]
+        rcis = {d: RCI(trade_chart.df, d) for d in durations}
+        basics = {}
+        for duration, rci in rcis.items():
+            basics[duration] = {}
+            for level in levels:
+                basics[duration][level] = RCIBasic(rci, level)
+                basics[duration][-level] = RCIBasic(rci, -level)
 
         for trend_minutes in [30, 60]:
             print(f'{datetime.now()}: Trade: {trade_minutes}, Trend: {trend_minutes}')
-            trends.clear()
             trend_chart = charts[trend_minutes]
+            trend = ADXDMI(trend_chart.df)
 
-            def perform(s: Simulator, p: Profit, _adx: int, di: int, entry_d: int, exit_d: int, entry_l: int,
-                        exit_l: int) -> Dict:
+            def perform(
+                    s: Simulator, p: Profit, _adx: int, di: int, entry_d: int, exit_d: int, entry_l: int, exit_l: int,
+            ) -> Dict:
                 print(
                     f'{datetime.now()}: Trade: {trade_minutes}, Trend: {trend_minutes}, '
                     f'ADX: {_adx}, DI: {di}, '
@@ -239,9 +217,9 @@ def simulate():
             profits = joblib.Parallel(n_jobs=-1)(
                 joblib.delayed(perform)(
                     Simulator(
-                        trend_chart.df, trade_chart.df,
-                        entry_d, -entry_l, exit_d, exit_l,
-                        exit_d, -exit_l, entry_d, entry_l,
+                        trend, trade_chart.df,
+                        basics[entry_d][-entry_l], basics[exit_d][exit_l],
+                        basics[exit_d][-exit_l], basics[entry_d][entry_l],
                         _adx, di, di,
                     ),
                     Profit(
@@ -256,10 +234,10 @@ def simulate():
                     entry_l,
                     exit_l,
                 )
-                for exit_l in [80, 85, 90, 95]
-                for entry_l in [80, 85, 90, 95]
-                for exit_d in [9, 13, 18, 21, 26, 34, 45]  # 5, 8, 22, 42, 52, 55, 75, 89]
-                for entry_d in [9, 13, 18, 21, 26, 34, 45]  # 5, 8, 22, 42, 52, 55, 75, 89]
+                for exit_l in levels
+                for entry_l in levels
+                for exit_d in durations
+                for entry_d in durations
                 for di in [20, 25, 30]
                 for _adx in [20, 25, 30]
             )
