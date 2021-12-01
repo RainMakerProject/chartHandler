@@ -71,14 +71,14 @@ class Chart:
 
         d = last_index.date[0]
         t = last_index.time[0]
-        dt: datetime = datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, 1)
+        dt: datetime = datetime(d.year, d.month, d.day, t.hour, t.minute, t.second)
 
         newer_df = ChartTable.query_as_data_frame(
             self.chart_type,
             ChartTable.period_from.between(dt, datetime.utcnow()),
         )
 
-        self.__df = self.__df.append(newer_df)
+        self.__df = self.__df.drop(index=last_index).append(newer_df)
 
         if len(self.__df.index) > self.__max_num_of_candles:
             self.__df = self.__df.iloc[-self.__max_num_of_candles:, :]
