@@ -131,9 +131,10 @@ class AdxRci:
         else:
             return
 
-        # Close the holding short position if in a uptrend, or opposite
+        # Close the holding short position if in a uptrend
         if self._position is not None and (self._position == 'SHORT' if opening_side == 'BUY' else 'LONG'):
             self._close_position(opening_side)
+        # Close the holding long position if in a downtrend
         elif speculation.entry:
             self._open_position(opening_side)
 
