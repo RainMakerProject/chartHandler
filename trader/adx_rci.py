@@ -124,13 +124,16 @@ class AdxRci:
         if dip >= self.di_threshold and dim >= self.di_threshold or dip <= self.di_threshold and dim <= self.di_threshold:
             return
 
+        opening_side, speculation = None, None
         if dip >= self.di_threshold:
             opening_side, speculation = 'BUY', self.uptrend
-        else:  # dim >= self.dim_threshold
+        elif dim >= self.di_threshold:
             opening_side, speculation = 'SELL', self.downtrend
+        if opening_side is None:
+            return
 
         # Close the holding short position if in a uptrend, or opposite
-        if self._position == 'SHORT' if opening_side == 'BUY' else 'LONG':
+        if self._position is not None and (self._position == 'SHORT' if opening_side == 'BUY' else 'LONG'):
             self._close_position(opening_side)
         elif speculation.entry:
             self._open_position(opening_side)
