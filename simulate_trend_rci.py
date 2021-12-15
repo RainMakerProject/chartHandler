@@ -1,7 +1,7 @@
 from typing import List, Dict
 
 import dataclasses
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import joblib
 import pandas
@@ -174,10 +174,9 @@ class Simulator:
         }, **kwargs})
 
 
-def simulate():
+def simulate(kwargs, duration):
     print(f'Start: {datetime.now()}')
 
-    kwargs = {'_from': datetime(1700, 1, 1), '_to': datetime(2021, 11, 30)}
     charts = {
         60: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_HOUR, **kwargs),
         30: Chart(ProductCode.FX_BTC_JPY, Candlestick.THIRTY_MINUTES, **kwargs),
@@ -188,6 +187,7 @@ def simulate():
 
     durations = [9, 13, 18, 21, 26, 34, 45]  # 5, 8, 22, 42, 52, 55, 75, 89]
     levels = [80, 85, 90, 95]
+    total_profits = []
 
     for trade_minutes in [1, 5]:
         trade_chart = charts[trade_minutes]
@@ -215,7 +215,7 @@ def simulate():
                 s.run(p)
                 return p.to_dict()
 
-            profits = joblib.Parallel(n_jobs=-1)(
+            profits = joblib.Parallel(n_jobs=1)(
                 joblib.delayed(perform)(
                     Simulator(
                         trend, trade_chart.df,
@@ -245,37 +245,59 @@ def simulate():
 
             print(f'PROCESSED COUNT: {len(profits)}, at: {datetime.now()}')
 
-            with open(f'simulate_trend_rci_{trade_minutes}_{trend_minutes}.csv', 'w') as f:
-                f.write(pandas.DataFrame(profits).to_csv())
+            total_profits += profits
 
     print(f'End: {datetime.now()}')
 
+    df = pandas.DataFrame(total_profits)
+    df = df[(df['won_ratio'] >= 0.9) & (df['trade_count']) >= duration]
+    return df.sort_values('profit').tail(1).to_dict()
+
 
 if __name__ == '__main__':
-    # simulate()
+    dt = datetime(2021, 11, 6)
+    until = datetime(2021, 12, 14)
+    duration = 3
+    results = []
+    while dt <= until:
+        kwargs = {
+            '_from': dt - timedelta(days=duration),
+            '_to': dt,
+        }
+        dt += timedelta(days=1)
+        result = simulate(kwargs, duration)
+        result['Date'] = dt
+        results.append(result)
 
-    kwargs = {'_from': datetime(1700, 1, 1), '_to': datetime(2021, 11, 30)}
-    charts = {
-        # 60: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_HOUR, **kwargs),
-        30: Chart(ProductCode.FX_BTC_JPY, Candlestick.THIRTY_MINUTES, **kwargs),
-        # 5: Chart(ProductCode.FX_BTC_JPY, Candlestick.FIVE_MINUTES, **kwargs),
-        1: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_MINUTE, **kwargs),
-    }
+    with open(f'results_duration{duration}.csv', 'w') as f:
+        _df = pandas.DataFrame(results)
+        _df.set_index('Date')
+        f.write(_df.to_csv)
 
-    trend_m, trade_m = 30, 1
-    od, ol, cd, cl = 9, 85, 18, 90
-    adx, di = 20, 25
-    trend_chart = charts[trend_m]
-    trade_chart = charts[trade_m]
-
-    trend = ADXDMI(trend_chart.df)
-
-    s = Simulator(
-        trend, trade_chart.df,
-        RCIBasic(RCI(trade_chart.df, od), -ol), RCIBasic(RCI(trade_chart.df, cd), cl),
-        RCIBasic(RCI(trade_chart.df, cd), -cl), RCIBasic(RCI(trade_chart.df, od), ol),
-        adx, di, di,
-    )
-    p = Profit(trend_m, trade_m, od, ol, cd, cl, adx, di)
-    s.run(p)
-    s.plot(title=f'{trend_m, trade_m} {od, ol, cd, cl} {adx, di} {p.profit,}')
+    # kwargs = {'_from': datetime(1700, 1, 1), '_to': datetime(2021, 11, 30)}
+    # kwargs = {'_from': datetime(2021, 11, 5), '_to': datetime(2021, 12, 30)}
+    #
+    # charts = {
+    #     60: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_HOUR, **kwargs),
+    #     30: Chart(ProductCode.FX_BTC_JPY, Candlestick.THIRTY_MINUTES, **kwargs),
+    #     # 5: Chart(ProductCode.FX_BTC_JPY, Candlestick.FIVE_MINUTES, **kwargs),
+    #     1: Chart(ProductCode.FX_BTC_JPY, Candlestick.ONE_MINUTE, **kwargs),
+    # }
+    #
+    # trend_m, trade_m = 30, 1
+    # od, ol, cd, cl = 26, 95, 45, 90  # 9, 85, 18, 90
+    # adx, di = 25, 20
+    # trend_chart = charts[trend_m]
+    # trade_chart = charts[trade_m]
+    #
+    # trend = ADXDMI(trend_chart.df)
+    #
+    # s = Simulator(
+    #     trend, trade_chart.df,
+    #     RCIBasic(RCI(trade_chart.df, od), -ol), RCIBasic(RCI(trade_chart.df, cd), cl),
+    #     RCIBasic(RCI(trade_chart.df, cd), -cl), RCIBasic(RCI(trade_chart.df, od), ol),
+    #     adx, di, di,
+    # )
+    # p = Profit(trend_m, trade_m, od, ol, cd, cl, adx, di)
+    # s.run(p)
+    # s.plot(title=f'{trend_m, trade_m} {od, ol, cd, cl} {adx, di} {p.profit,}')
