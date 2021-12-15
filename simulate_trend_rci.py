@@ -215,7 +215,7 @@ def simulate(kwargs, duration):
                 s.run(p)
                 return p.to_dict()
 
-            profits = joblib.Parallel(n_jobs=1)(
+            profits = joblib.Parallel(n_jobs=-1)(
                 joblib.delayed(perform)(
                     Simulator(
                         trend, trade_chart.df,
@@ -264,10 +264,12 @@ if __name__ == '__main__':
             '_from': dt - timedelta(days=duration),
             '_to': dt,
         }
-        dt += timedelta(days=1)
+
         result = simulate(kwargs, duration)
         result['Date'] = dt
         results.append(result)
+
+        dt += timedelta(days=1)
 
     with open(f'results_duration{duration}.csv', 'w') as f:
         _df = pandas.DataFrame(results)
